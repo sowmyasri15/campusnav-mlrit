@@ -15,11 +15,18 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
-  const [prefs, setPrefs]     = useState(null);
+  const [user, setUser] = useState(null);
+  const [prefs, setPrefs] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setUser(null);
+      setPrefs(null);
+      setLoading(false);
+      return undefined;
+    }
+
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -37,24 +44,36 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
-  const login = (email, password) =>
-    signInWithEmailAndPassword(auth, email, password);
+  const login = (email, password) => {
+    if (!auth) {
+      return Promise.reject(new Error('Firebase authentication is not configured. Add the Firebase environment variables first.'));
+    }
+    return signInWithEmailAndPassword(auth, email, password);
+  };
 
   const signup = async (email, password, name) => {
+    if (!auth) {
+      throw new Error('Firebase authentication is not configured. Add the Firebase environment variables first.');
+    }
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
     await createUserPrefs(cred.user.uid, email, name);
     return cred;
   };
 
-  const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+  const loginWithGoogle = () => {
+    if (!auth || !googleProvider) {
+      return Promise.reject(new Error('Google sign-in is unavailable because Firebase is not configured.'));
+    }
+    return signInWithPopup(auth, googleProvider);
+  };
 
-  const logout = () => signOut(auth);
+  const logout = () => (auth ? signOut(auth) : Promise.resolve());
 
   const isAdmin = user?.email === 'admin@example.com';
 
   const refreshPrefs = async () => {
-    if (user) {
+    if (user && auth) {
       const p = await getUserPrefs(user.uid);
       setPrefs(p);
     }
